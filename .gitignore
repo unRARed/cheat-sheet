@@ -1,5 +1,6 @@
 .DS_Store
-data.json
+injuries.json
+tiers.json
 .byebug*
 .~lock*
 *.xlsx

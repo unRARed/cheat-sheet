@@ -6,11 +6,47 @@ require 'byebug'
 require 'json'
 require 'axlsx'
 
-if File.file?('data.json') && file = File.open("data.json").read
-  puts 'Using pre-fetched data from data.json'
+if File.file?('injuries.json') && file = File.open("injuries.json").read
+  puts 'Using pre-fetched data from injuries.json'
+  injury_report = JSON.parse(file, :symbolize_names => true)
+else
+  puts 'Saving data from ESPN to injuries.json'
+  injuries_html = Nokogiri::HTML(
+    URI.open('https://www.espn.com/nfl/injuries')
+  )
+  injuries = JSON.
+    parse('{' + injuries_html.css('script').
+      map{|s| s.children }[3][0].content.split(/\{/, 2).last[0..-2],
+    symbolize_names: true)[:page][:content][:injuries]
+  filtered_injuries = injuries.
+    map{|team| team[:items].
+    select{|item| ['INJURY_STATUS_IR', 'INJURY_STATUS_OUT'].
+      include?(item[:type][:name]) &&
+      ['QB', 'RB', 'WR', 'TE', 'K'].
+      include?(item[:athlete][:position]) }}.
+    flatten.
+    map{|item| [
+      item[:type][:name],
+      item[:athlete][:name],
+      item[:athlete][:position]
+    ]}
+  injury_report = {
+    ir: filtered_injuries.
+      select{|injury| injury[0] == "INJURY_STATUS_IR"},
+    out: filtered_injuries.
+      select{|injury| injury[0] == "INJURY_STATUS_OUT"}
+  }
+
+  File.open('injuries.json', 'w') do |f|
+    f.puts injury_report.to_json
+  end
+end
+
+if File.file?('tiers.json') && file = File.open("tiers.json").read
+  puts 'Using pre-fetched data from tiers.json'
   sources = JSON.parse(file, :symbolize_names => true)
 else
-  puts 'Saving data from borischen.co to data.json'
+  puts 'Saving data from borischen.co to tiers.json'
   sources = [
     {
       label: 'qb',
@@ -67,27 +103,36 @@ else
     f.puts sources.to_json
   end
 end
-
+###########################################
+## Zip the tiers for displaying in a row ##
+###########################################
 row_contents = []
 positions = sources.map{|s| s[:tiers] }
 max_tiers = sources.map{|s| s[:tiers].count }.max
+injured_ir = injury_report[:ir].map{|a| "#{a[1]} (#{a[2]})" }.flatten
+injured_out = injury_report[:out].map{|a| "#{a[1]} (#{a[2]})" }.flatten
 max_tiers.times do |tier_index|
   (
     sources.map{|s| s[:tiers][tier_index] }.
     compact.map{|s| s.count }.max
   ).times do |player_index|
-    row_contents << sources.map do |s|
-      s[:tiers].dig(tier_index, player_index)&.strip || ''
-    end
+    row_contents << (
+      sources.map do |s|
+        s[:tiers].dig(tier_index, player_index)&.strip || ''
+      end
+    ) + ['', injured_ir.shift,  injured_out.shift ]
   end
   row_contents << ["END OF TIER"]
 end
 
+#####################
+## Build the sheet ##
+#####################
 Axlsx::Package.new do |p|
   puts 'Generating cheat-sheet'
   s = p.workbook.styles
-  heading = s.add_style fg_color: 'FFFFFF', bg_color: '222222', sz: 8
-  body = s.add_style fg_color: '222222', sz: 7
+  heading = s.add_style fg_color: 'FFFFFF', bg_color: '222222', sz: 8, b: true
+  normal = s.add_style fg_color: '222222', sz: 7
   divider = s.add_style fg_color: '222222', bg_color: '222222', sz: 1
   qb = s.add_style fg_color: '222222', bg_color: 'fbff58', sz: 7
   qb2 = s.add_style fg_color: '222222', bg_color: 'fdff9d', sz: 7
@@ -101,8 +146,10 @@ Axlsx::Package.new do |p|
   k2 = s.add_style fg_color: '222222', bg_color: 'fbd690', sz: 7
   dst = s.add_style fg_color: '222222', bg_color: 'b792f3', sz: 7
   dst2 = s.add_style fg_color: '222222', bg_color: 'd4baff', sz: 7
-  body = [qb, rb2, wr, te2, k, dst2]
-  body2 = [qb2, rb, wr2, te, k2, dst]
+  inj1 = s.add_style fg_color: '7b0b0b', bg_color: 'e87777', sz: 7, b: true
+  inj2 = s.add_style fg_color: '7b0b0b', bg_color: 'ffb1b1', sz: 7
+  body = [qb, rb2, wr, te2, k, dst2, divider, inj1, inj2]
+  body2 = [qb2, rb, wr2, te, k2, dst, divider, inj1, inj2]
   is_odd = false
 
   p.workbook.add_worksheet(
@@ -118,12 +165,15 @@ Axlsx::Package.new do |p|
       :bottom => 0.25,
     }
   ) do |sheet|
-    sheet.add_row sources.map{|s| s[:label].upcase },
+    sheet.add_row sources.map{|s| s[:label].upcase } +
+      ['', 'Injured (IR)', 'Injured (OUT)'],
       style: heading, height: 10
     row_contents.each do |row_content|
       if row_content[0] == "END OF TIER"
         is_odd = !is_odd
-        sheet.add_row ["", "", "", "", "", ""], style: divider, height: 2
+        sheet.add_row ["", "", "", "", "", "", "", "", ""],
+          style: divider,
+          height: 2
         next
       end
       if is_odd
