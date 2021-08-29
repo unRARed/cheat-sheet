@@ -173,7 +173,7 @@ Axlsx::Package.new do |p|
         is_odd = !is_odd
         sheet.add_row ["", "", "", "", "", "", "", "", ""],
           style: divider,
-          height: 2
+          height: 3
         next
       end
       if is_odd
@@ -182,6 +182,7 @@ Axlsx::Package.new do |p|
         sheet.add_row row_content, style: body2, height: 8
       end
     end
+    sheet.column_widths *(sources.count.times.map{ 15 } + [1] + [16, 16])
   end
   p.serialize('cheat-sheet.xlsx')
 end
