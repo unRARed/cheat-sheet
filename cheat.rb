@@ -5,6 +5,12 @@ require 'open-uri'
 require 'byebug'
 require 'json'
 require 'axlsx'
+require 'webdrivers'
+require 'watir'
+
+Watir.default_timeout = 60
+browser = Watir::Browser.new :chrome,
+  options: { prefs: {} }, headless: true
 
 if File.file?('injuries.json') && file = File.open("injuries.json").read
   puts 'Using pre-fetched data from injuries.json'
@@ -46,63 +52,78 @@ if File.file?('tiers.json') && file = File.open("tiers.json").read
   puts 'Using pre-fetched data from tiers.json'
   sources = JSON.parse(file, :symbolize_names => true)
 else
-  puts 'Saving data from borischen.co to tiers.json'
+  puts 'Saving data from Fantasy Pros to tiers.json'
   sources = [
     {
       label: 'qb',
-      url: 'http://www.borischen.co/p/quarterback-tier-rankings.html',
+      url: 'https://www.fantasypros.com/nfl/rankings/qb-cheatsheets.php',
       tiers: []
     },
     {
       label: 'rb',
-      url: 'http://www.borischen.co/p/half-05-5-ppr-running-back-tier-rankings.html',
+      url: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-rb-cheatsheets.php',
       tiers: []
     },
     {
       label: 'wr',
-      url: 'http://www.borischen.co/p/half-05-5-ppr-wide-receiver-tier.html',
+      url: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-wr-cheatsheets.php',
       tiers: []
     },
     {
       label: 'te',
-      url: 'http://www.borischen.co/p/half-05-5-ppr-tight-end-tier-rankings.html',
+      url: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-te-cheatsheets.php',
       tiers: []
     },
     {
       label: 'k',
-      url: 'http://www.borischen.co/p/kicker-tier-rankings.html',
+      url: 'https://www.fantasypros.com/nfl/rankings/k-cheatsheets.php',
       tiers: []
     },
     {
       label: 'dst',
-      url: 'http://www.borischen.co/p/defense-dst-tier-rankings.html',
+      url: 'https://www.fantasypros.com/nfl/rankings/dst-cheatsheets.php',
       tiers: []
     }
   ]
   sources.each do |source|
-    tiers = []
     doc = Nokogiri::HTML(
       URI.open(source[:url])
     )
-    s3_files = doc.css('object').map{|o| o.values[0] }
-    s3_files.each do |file|
-      puts "Saving #{source[:label]}s"
-      text = Net::HTTP.get_response(URI.parse(file))
-      text.body.split("\n").each do |line|
+    puts "Saving #{source[:label].upcase}s"
+    browser.goto(source[:url])
+    table = browser.table(id: "ranking-table")
+    table.wait_until(&:exists?)
+    # match both of:
+    #   <tr data-tier="2" class="tier-row static">
+    #   <tr class="player-row">
+    rows = table.elements(tag_name: "tr", class: /.*-row/)
+    rows.wait_until(&:exists?)
+    tier = []
+    # necessary or will prematurely
+    # scrape (missing later tiers)
+    sleep 5
+    puts "Found #{rows.count} rows"
+    rows.each_with_index do |row, index|
+      break if index > 70
+      if row.attributes[:class].include? "tier-row"
+        next if tier.empty?
+        puts " -> Scraped Tier #{source[:tiers].count + 1}"
+        source[:tiers] << tier
         tier = []
-        line.split(',').each do |player|
-          tier << player.split(/Tier\ \d+:\ /).last
-        end
-        tiers << tier
+      elsif row.attributes[:class].include? "player-row"
+        tier << "#{row.a.text} " \
+          "#{row.span(class: "player-cell-team").text}"
       end
     end
-    source[:tiers] = tiers
   end
 
-  File.open('data.json', 'w') do |f|
+  puts "Writing tiers.json"
+  File.open('tiers.json', 'w') do |f|
     f.puts sources.to_json
   end
 end
+
+puts "Preparing local data for spreadsheet"
 ###########################################
 ## Zip the tiers for displaying in a row ##
 ###########################################
@@ -128,8 +149,8 @@ end
 #####################
 ## Build the sheet ##
 #####################
+puts "Generating cheat-sheet"
 Axlsx::Package.new do |p|
-  puts 'Generating cheat-sheet'
   s = p.workbook.styles
   heading = s.add_style fg_color: 'FFFFFF', bg_color: '222222', sz: 8, b: true
   normal = s.add_style fg_color: '222222', sz: 7
@@ -186,3 +207,4 @@ Axlsx::Package.new do |p|
   end
   p.serialize('cheat-sheet.xlsx')
 end
+puts "All done. Crack a beer and draft."
