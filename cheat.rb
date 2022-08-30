@@ -104,7 +104,7 @@ else
     sleep 5
     puts "Found #{rows.count} rows"
     rows.each_with_index do |row, index|
-      break if index > 70
+      break if index > 120
       if row.attributes[:class].include? "tier-row"
         next if tier.empty?
         puts " -> Scraped Tier #{source[:tiers].count + 1}"
@@ -130,6 +130,7 @@ puts "Preparing local data for spreadsheet"
 row_contents = []
 positions = sources.map{|s| s[:tiers] }
 max_tiers = sources.map{|s| s[:tiers].count }.max
+max_tiers = 8 if max_tiers > 8
 injured_ir = injury_report[:ir].map{|a| "#{a[1]} (#{a[2]})" }.flatten
 injured_out = injury_report[:out].map{|a| "#{a[1]} (#{a[2]})" }.flatten
 max_tiers.times do |tier_index|
@@ -152,23 +153,24 @@ end
 puts "Generating cheat-sheet"
 Axlsx::Package.new do |p|
   s = p.workbook.styles
-  heading = s.add_style fg_color: 'FFFFFF', bg_color: '222222', sz: 8, b: true
-  normal = s.add_style fg_color: '222222', sz: 7
+  heading = s.add_style fg_color: 'FFFFFF',
+    bg_color: '222222', sz: 8, b: true
+  normal = s.add_style fg_color: '222222', sz: 6
   divider = s.add_style fg_color: '222222', bg_color: '222222', sz: 1
-  qb = s.add_style fg_color: '222222', bg_color: 'fbff58', sz: 7
-  qb2 = s.add_style fg_color: '222222', bg_color: 'fdff9d', sz: 7
-  wr = s.add_style fg_color: '222222', bg_color: '58c8ff', sz: 7
-  wr2 = s.add_style fg_color: '222222', bg_color: '9edfff', sz: 7
-  rb = s.add_style fg_color: '222222', bg_color: '58ff8c', sz: 7
-  rb2 = s.add_style fg_color: '222222', bg_color: '91f1af', sz: 7
-  te = s.add_style fg_color: '222222', bg_color: 'ff81ef', sz: 7
-  te2 = s.add_style fg_color: '222222', bg_color: 'f5bdee', sz: 7
-  k = s.add_style fg_color: '222222', bg_color: 'f7bf55', sz: 7
-  k2 = s.add_style fg_color: '222222', bg_color: 'fbd690', sz: 7
-  dst = s.add_style fg_color: '222222', bg_color: 'b792f3', sz: 7
-  dst2 = s.add_style fg_color: '222222', bg_color: 'd4baff', sz: 7
-  inj1 = s.add_style fg_color: '7b0b0b', bg_color: 'e87777', sz: 7, b: true
-  inj2 = s.add_style fg_color: '7b0b0b', bg_color: 'ffb1b1', sz: 7
+  qb = s.add_style fg_color: '222222', bg_color: 'ffffd1', sz: 7
+  qb2 = s.add_style fg_color: '222222', bg_color: 'f3ffe3', sz: 7
+  wr = s.add_style fg_color: '222222', bg_color: 'ecd4ff', sz: 7
+  wr2 = s.add_style fg_color: '222222', bg_color: 'dcd3ff', sz: 7
+  rb = s.add_style fg_color: '222222', bg_color: 'aff8db', sz: 7
+  rb2 = s.add_style fg_color: '222222', bg_color: 'bffcc6', sz: 7
+  te = s.add_style fg_color: '222222', bg_color: 'ffccf9', sz: 7
+  te2 = s.add_style fg_color: '222222', bg_color: 'fcc2ff', sz: 7
+  k = s.add_style fg_color: '222222', bg_color: '85e3ff', sz: 7
+  k2 = s.add_style fg_color: '222222', bg_color: 'ace7ff', sz: 7
+  dst = s.add_style fg_color: '222222', bg_color: 'ffdf9e', sz: 7
+  dst2 = s.add_style fg_color: '222222', bg_color: 'ffdfbf', sz: 7
+  inj1 = s.add_style fg_color: '7b0b0b', bg_color: 'f4cdcc', sz: 7, b: true
+  inj2 = s.add_style fg_color: '7b0b0b', bg_color: 'edacab', sz: 7
   body = [qb, rb2, wr, te2, k, dst2, divider, inj1, inj2]
   body2 = [qb2, rb, wr2, te, k2, dst, divider, inj1, inj2]
   is_odd = false
@@ -176,14 +178,14 @@ Axlsx::Package.new do |p|
   p.workbook.add_worksheet(
     :name => "Cheat Sheet",
     :page_setup => {
-      :orientation => :landscape,
+      :orientation => :portrait,
       :fit_to_width => 1
     },
     :page_margins => {
-      :right => 0.25,
-      :left => 0.25,
-      :top => 0.25,
-      :bottom => 0.25,
+      :right => 0.15,
+      :left => 0.15,
+      :top => 0.15,
+      :bottom => 0.15,
     }
   ) do |sheet|
     sheet.add_row sources.map{|s| s[:label].upcase } +
@@ -203,7 +205,7 @@ Axlsx::Package.new do |p|
         sheet.add_row row_content, style: body2, height: 8
       end
     end
-    sheet.column_widths *(sources.count.times.map{ 15 } + [1] + [16, 16])
+    sheet.column_widths *(sources.count.times.map{ 16 } + [1] + [15, 15])
   end
   p.serialize('cheat-sheet.xlsx')
 end
