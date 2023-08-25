@@ -9,44 +9,44 @@ require 'webdrivers'
 require 'watir'
 
 Watir.default_timeout = 60
-browser = Watir::Browser.new :chrome,
-  options: { prefs: {} }, headless: true
+browser = Watir::Browser.new :firefox, headless: true
 
-if File.file?('injuries.json') && file = File.open("injuries.json").read
-  puts 'Using pre-fetched data from injuries.json'
-  injury_report = JSON.parse(file, :symbolize_names => true)
-else
-  puts 'Saving data from ESPN to injuries.json'
-  injuries_html = Nokogiri::HTML(
-    URI.open('https://www.espn.com/nfl/injuries')
-  )
-  injuries = JSON.
-    parse('{' + injuries_html.css('script').
-      map{|s| s.children }[3][0].content.split(/\{/, 2).last[0..-2],
-    symbolize_names: true)[:page][:content][:injuries]
-  filtered_injuries = injuries.
-    map{|team| team[:items].
-    select{|item| ['INJURY_STATUS_IR', 'INJURY_STATUS_OUT'].
-      include?(item[:type][:name]) &&
-      ['QB', 'RB', 'WR', 'TE', 'K'].
-      include?(item[:athlete][:position]) }}.
-    flatten.
-    map{|item| [
-      item[:type][:name],
-      item[:athlete][:name],
-      item[:athlete][:position]
-    ]}
-  injury_report = {
-    ir: filtered_injuries.
-      select{|injury| injury[0] == "INJURY_STATUS_IR"},
-    out: filtered_injuries.
-      select{|injury| injury[0] == "INJURY_STATUS_OUT"}
-  }
+# if File.file?('injuries.json') && file = File.open("injuries.json").read
+#   puts 'Using pre-fetched data from injuries.json'
+#   injury_report = JSON.parse(file, :symbolize_names => true)
+# else
+#   puts 'Saving data from ESPN to injuries.json'
+#   injuries_html = Nokogiri::HTML(
+#     URI.open('https://www.espn.com/nfl/injuries')
+#   )
+#   byebug
+#   injuries = JSON.
+#     parse('{' + injuries_html.css('script').
+#       map{|s| s.children }[3][0].content.split(/\{/, 2).last[0..-2],
+#     symbolize_names: true)[:page][:content][:injuries]
+#   filtered_injuries = injuries.
+#     map{|team| team[:items].
+#     select{|item| ['INJURY_STATUS_IR', 'INJURY_STATUS_OUT'].
+#       include?(item[:type][:name]) &&
+#       ['QB', 'RB', 'WR', 'TE', 'K'].
+#       include?(item[:athlete][:position]) }}.
+#     flatten.
+#     map{|item| [
+#       item[:type][:name],
+#       item[:athlete][:name],
+#       item[:athlete][:position]
+#     ]}
+#   injury_report = {
+#     ir: filtered_injuries.
+#       select{|injury| injury[0] == "INJURY_STATUS_IR"},
+#     out: filtered_injuries.
+#       select{|injury| injury[0] == "INJURY_STATUS_OUT"}
+#   }
 
-  File.open('injuries.json', 'w') do |f|
-    f.puts injury_report.to_json
-  end
-end
+#   File.open('injuries.json', 'w') do |f|
+#     f.puts injury_report.to_json
+#   end
+# end
 
 if File.file?('tiers.json') && file = File.open("tiers.json").read
   puts 'Using pre-fetched data from tiers.json'
@@ -131,8 +131,8 @@ row_contents = []
 positions = sources.map{|s| s[:tiers] }
 max_tiers = sources.map{|s| s[:tiers].count }.max
 max_tiers = 8 if max_tiers > 8
-injured_ir = injury_report[:ir].map{|a| "#{a[1]} (#{a[2]})" }.flatten
-injured_out = injury_report[:out].map{|a| "#{a[1]} (#{a[2]})" }.flatten
+# injured_ir = injury_report[:ir].map{|a| "#{a[1]} (#{a[2]})" }.flatten
+# injured_out = injury_report[:out].map{|a| "#{a[1]} (#{a[2]})" }.flatten
 max_tiers.times do |tier_index|
   (
     sources.map{|s| s[:tiers][tier_index] }.
@@ -142,7 +142,7 @@ max_tiers.times do |tier_index|
       sources.map do |s|
         s[:tiers].dig(tier_index, player_index)&.strip || ''
       end
-    ) + ['', injured_ir.shift,  injured_out.shift ]
+    )# + ['', injured_ir.shift,  injured_out.shift ]
   end
   row_contents << ["END OF TIER"]
 end
@@ -188,8 +188,8 @@ Axlsx::Package.new do |p|
       :bottom => 0.15,
     }
   ) do |sheet|
-    sheet.add_row sources.map{|s| s[:label].upcase } +
-      ['', 'Injured (IR)', 'Injured (OUT)'],
+    sheet.add_row sources.map{|s| s[:label].upcase },# +
+      #['',], 'Injured (IR)', 'Injured (OUT)'],
       style: heading, height: 10
     row_contents.each do |row_content|
       if row_content[0] == "END OF TIER"
