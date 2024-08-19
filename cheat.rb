@@ -83,6 +83,11 @@ else
       label: 'dst',
       url: 'https://www.fantasypros.com/nfl/rankings/dst-cheatsheets.php',
       tiers: []
+    },
+    {
+      label: 'idp',
+      url: 'https://www.fantasypros.com/nfl/rankings/idp-cheatsheets.php',
+      tiers: []
     }
   ]
   sources.each do |source|
@@ -169,10 +174,12 @@ Axlsx::Package.new do |p|
   k2 = s.add_style fg_color: '222222', bg_color: 'ace7ff', sz: 7
   dst = s.add_style fg_color: '222222', bg_color: 'ffdf9e', sz: 7
   dst2 = s.add_style fg_color: '222222', bg_color: 'ffdfbf', sz: 7
+  idp = s.add_style fg_color: '222222', bg_color: 'f5f5f5', sz: 7
+  idp2 = s.add_style fg_color: '222222', bg_color: 'e2e2e2', sz: 7
   inj1 = s.add_style fg_color: '7b0b0b', bg_color: 'f4cdcc', sz: 7, b: true
   inj2 = s.add_style fg_color: '7b0b0b', bg_color: 'edacab', sz: 7
-  body = [qb, rb2, wr, te2, k, dst2, divider, inj1, inj2]
-  body2 = [qb2, rb, wr2, te, k2, dst, divider, inj1, inj2]
+  body = [qb, rb2, wr, te2, k, dst2, idp, divider, inj1, inj2]
+  body2 = [qb2, rb, wr2, te, k2, dst, idp2, divider, inj1, inj2]
   is_odd = false
 
   p.workbook.add_worksheet(
@@ -194,7 +201,7 @@ Axlsx::Package.new do |p|
     row_contents.each do |row_content|
       if row_content[0] == "END OF TIER"
         is_odd = !is_odd
-        sheet.add_row ["", "", "", "", "", "", "", "", ""],
+        sheet.add_row ["", "", "", "", "", "", ""],
           style: divider,
           height: 3
         next
@@ -205,7 +212,7 @@ Axlsx::Package.new do |p|
         sheet.add_row row_content, style: body2, height: 8
       end
     end
-    sheet.column_widths *(sources.count.times.map{ 16 } + [1] + [15, 15])
+    sheet.column_widths *(sources.count.times.map{ 19 })
   end
   p.serialize('cheat-sheet.xlsx')
 end

@@ -1,6 +1,6 @@
 .DS_Store
 injuries.json
-tiers.json
+tiers*.json
 .byebug*
 .~lock*
 *.xlsx
