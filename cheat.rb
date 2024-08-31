@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 
-require 'nokogiri'
-require 'open-uri'
-require 'byebug'
-require 'json'
-require 'axlsx'
-require 'webdrivers'
-require 'watir'
+require "nokogiri"
+require "open-uri"
+require "byebug"
+require "json"
+require "axlsx"
+require "webdrivers"
+require "watir"
 
 Watir.default_timeout = 60
 browser = Watir::Browser.new :firefox, headless: true
@@ -14,19 +14,24 @@ browser = Watir::Browser.new :firefox, headless: true
 options = {
   idp: false,
   concerns: false,
-  fresh: false
+  fresh: false,
+  fullppr: false,
 }
+
+url_prefix = "half-point-"
 
 ARGV.each do |arg|
   case arg
-  when '--idp'
+  when "--idp"
     options[:idp] = true
     puts "Including individual defensive players"
-  when '--concerns'
+  when "--concerns"
     options[:concerns] = true
     puts "Including list of players having concerns"
-  when '--fresh'
-    File.delete('tiers.json') if File.file?('tiers.json')
+  when "--fullppr"
+    url_prefix = ""
+  when "--fresh"
+    File.delete("tiers.json") if File.file?("tiers.json")
   else
     puts "Unknown option: #{arg}"
     exit
@@ -36,31 +41,31 @@ end
 if options[:concerns]
   STATUSES = ["IR", "IR-R", "NFI-R", "PUP-R", "SUSP"]
 
-  if File.file?('concerns.json') && file = File.open("concerns.json").read
-    puts 'Using pre-fetched data from concerns.json'
+  if File.file?("concerns.json") && file = File.open("concerns.json").read
+    puts "Using pre-fetched data from concerns.json"
     concerns = JSON.parse(file)
   else
-    puts 'Saving data from Yahoo to concerns.json'
+    puts "Saving data from Yahoo to concerns.json"
     concerns_html = Nokogiri::HTML(
-      URI.open('https://football.fantasysports.yahoo.com/f1/gamedaycalls')
+      URI.open("https://football.fantasysports.yahoo.com/f1/gamedaycalls")
     )
-    rows = concerns_html.css('#gamedayscalltable tbody tr')
+    rows = concerns_html.css("#gamedayscalltable tbody tr")
     concerns = {}
     rows.each do |row|
-      next unless row.css('.ysf-player-name a').text
+      next unless row.css(".ysf-player-name a").text
       # ignore the blank status to keep the list short
-      status = row.css('td .Badge-negative-bench').text
+      status = row.css("td .Badge-negative-bench").text
       puts "Found #{status}"
-      next if status&.strip == '' ||
+      next if status&.strip == "" ||
         !status || !STATUSES.include?(status.strip)
 
       unless concerns[status]
         concerns[status] = []
       end
-      concerns[status] << row.css('.ysf-player-name a').text
+      concerns[status] << row.css(".ysf-player-name a").text
     end
 
-    File.open('concerns.json', 'w') do |f|
+    File.open("concerns.json", "w") do |f|
       f.puts concerns.to_json
     end
   end
@@ -71,50 +76,50 @@ if options[:concerns]
 end
 
 if (
-  File.file?('tiers.json') &&
+  File.file?("tiers.json") &&
   file = File.open("tiers.json").read
 )
-  puts 'Using pre-fetched data from tiers.json'
+  puts "Using pre-fetched data from tiers.json"
   sources = JSON.parse(file, :symbolize_names => true)
 else
-  puts 'Saving data from Fantasy Pros to tiers.json'
+  puts "Saving data from Fantasy Pros to tiers.json"
   sources = [
     {
-      label: 'qb',
-      url: 'https://www.fantasypros.com/nfl/rankings/qb-cheatsheets.php',
+      label: "qb",
+      url: "https://www.fantasypros.com/nfl/rankings/qb-cheatsheets.php",
       tiers: []
     },
     {
-      label: 'rb',
-      url: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-rb-cheatsheets.php',
+      label: "rb",
+      url: "https://www.fantasypros.com/nfl/rankings/#{url_prefix}ppr-rb-cheatsheets.php",
       tiers: []
     },
     {
-      label: 'wr',
-      url: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-wr-cheatsheets.php',
+      label: "wr",
+      url: "https://www.fantasypros.com/nfl/rankings/#{url_prefix}ppr-wr-cheatsheets.php",
       tiers: []
     },
     {
-      label: 'te',
-      url: 'https://www.fantasypros.com/nfl/rankings/half-point-ppr-te-cheatsheets.php',
+      label: "te",
+      url: "https://www.fantasypros.com/nfl/rankings/#{url_prefix}ppr-te-cheatsheets.php",
       tiers: []
     },
     {
-      label: 'k',
-      url: 'https://www.fantasypros.com/nfl/rankings/k-cheatsheets.php',
+      label: "k",
+      url: "https://www.fantasypros.com/nfl/rankings/k-cheatsheets.php",
       tiers: []
     },
     {
-      label: 'dst',
-      url: 'https://www.fantasypros.com/nfl/rankings/dst-cheatsheets.php',
+      label: "dst",
+      url: "https://www.fantasypros.com/nfl/rankings/dst-cheatsheets.php",
       tiers: []
     },
   ]
 
   if options[:idp]
     sources << {
-      label: 'idp',
-      url: 'https://www.fantasypros.com/nfl/rankings/idp-cheatsheets.php',
+      label: "idp",
+      url: "https://www.fantasypros.com/nfl/rankings/idp-cheatsheets.php",
       tiers: []
     }
   end
@@ -152,7 +157,7 @@ else
   end
 
   puts "Writing tiers.json"
-  File.open('tiers.json', 'w') do |f|
+  File.open("tiers.json", "w") do |f|
     f.puts sources.to_json
   end
 end
@@ -171,7 +176,7 @@ max_tiers.times do |tier_index|
     compact.map{|s| s.count }.max
   ).times do |player_index|
     row = sources.map do |s|
-      s[:tiers].dig(tier_index, player_index)&.strip || ''
+      s[:tiers].dig(tier_index, player_index)&.strip || ""
     end
     if options[:concerns]
       row += [ flat_concerns.shift ]
@@ -185,29 +190,29 @@ end
 ## Build the sheet ##
 #####################
 puts "Generating cheat-sheet for " \
-  "#{sources.map{|s| s[:label].upcase }.join(', ')}"
+  "#{sources.map{|s| s[:label].upcase }.join(", ")}"
 Axlsx::Package.new do |p|
   s = p.workbook.styles
-  heading = s.add_style fg_color: 'FFFFFF',
-    bg_color: '222222', sz: 8, b: true
-  normal = s.add_style fg_color: '222222', sz: 6
-  divider = s.add_style fg_color: '222222', bg_color: '222222', sz: 1
-  qb = s.add_style fg_color: '222222', bg_color: 'ffffd1', sz: 7
-  qb2 = s.add_style fg_color: '222222', bg_color: 'f3ffe3', sz: 7
-  wr = s.add_style fg_color: '222222', bg_color: 'ecd4ff', sz: 7
-  wr2 = s.add_style fg_color: '222222', bg_color: 'dcd3ff', sz: 7
-  rb = s.add_style fg_color: '222222', bg_color: 'aff8db', sz: 7
-  rb2 = s.add_style fg_color: '222222', bg_color: 'bffcc6', sz: 7
-  te = s.add_style fg_color: '222222', bg_color: 'ffccf9', sz: 7
-  te2 = s.add_style fg_color: '222222', bg_color: 'fcc2ff', sz: 7
-  k = s.add_style fg_color: '222222', bg_color: '85e3ff', sz: 7
-  k2 = s.add_style fg_color: '222222', bg_color: 'ace7ff', sz: 7
-  dst = s.add_style fg_color: '222222', bg_color: 'ffdf9e', sz: 7
-  dst2 = s.add_style fg_color: '222222', bg_color: 'ffdfbf', sz: 7
-  idp = s.add_style fg_color: '222222', bg_color: 'f5f5f5', sz: 7
-  idp2 = s.add_style fg_color: '222222', bg_color: 'e2e2e2', sz: 7
-  inj1 = s.add_style fg_color: '7b0b0b', bg_color: 'f4cdcc', sz: 7, b: true
-  inj2 = s.add_style fg_color: '7b0b0b', bg_color: 'edacab', sz: 7
+  heading = s.add_style fg_color: "FFFFFF",
+    bg_color: "222222", sz: 8, b: true
+  normal = s.add_style fg_color: "222222", sz: 6
+  divider = s.add_style fg_color: "222222", bg_color: "222222", sz: 1
+  qb = s.add_style fg_color: "222222", bg_color: "ffffd1", sz: 7
+  qb2 = s.add_style fg_color: "222222", bg_color: "f3ffe3", sz: 7
+  wr = s.add_style fg_color: "222222", bg_color: "ecd4ff", sz: 7
+  wr2 = s.add_style fg_color: "222222", bg_color: "dcd3ff", sz: 7
+  rb = s.add_style fg_color: "222222", bg_color: "aff8db", sz: 7
+  rb2 = s.add_style fg_color: "222222", bg_color: "bffcc6", sz: 7
+  te = s.add_style fg_color: "222222", bg_color: "ffccf9", sz: 7
+  te2 = s.add_style fg_color: "222222", bg_color: "fcc2ff", sz: 7
+  k = s.add_style fg_color: "222222", bg_color: "85e3ff", sz: 7
+  k2 = s.add_style fg_color: "222222", bg_color: "ace7ff", sz: 7
+  dst = s.add_style fg_color: "222222", bg_color: "ffdf9e", sz: 7
+  dst2 = s.add_style fg_color: "222222", bg_color: "ffdfbf", sz: 7
+  idp = s.add_style fg_color: "222222", bg_color: "f5f5f5", sz: 7
+  idp2 = s.add_style fg_color: "222222", bg_color: "e2e2e2", sz: 7
+  inj1 = s.add_style fg_color: "7b0b0b", bg_color: "f4cdcc", sz: 7, b: true
+  inj2 = s.add_style fg_color: "7b0b0b", bg_color: "edacab", sz: 7
 
   body = [qb, rb2, wr, te2, k, dst2]
   body += [idp] if options[:idp]
@@ -251,6 +256,6 @@ Axlsx::Package.new do |p|
     end
     sheet.column_widths *(headers.count.times.map{ 18 })
   end
-  p.serialize('cheat-sheet.xlsx')
+  p.serialize("cheat-sheet.xlsx")
 end
 puts "All done. Crack a beer and draft."

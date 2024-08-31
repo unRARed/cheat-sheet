@@ -21,6 +21,8 @@ will use this data unless the file is deleted.
 ### Options
 
 - `./cheat.rb --fresh` force a fresh scraping of the data.
+- `./cheat.rb --fresh --fullppr` force a fresh scraping of the
+  data using full PPR rankings.
 - `./cheat.rb --idp` ensure IDP players are included in the
   scraping step.
 - `./cheat.rb --concerns` include a list of players with
