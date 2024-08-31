@@ -11,57 +11,63 @@ require 'watir'
 Watir.default_timeout = 60
 browser = Watir::Browser.new :firefox, headless: true
 
-# if File.file?('injuries.json') && file = File.open("injuries.json").read
-#   puts 'Using pre-fetched data from injuries.json'
-#   injury_report = JSON.parse(file, :symbolize_names => true)
-# else
-#   puts 'Saving data from ESPN to injuries.json'
-#   injuries_html = Nokogiri::HTML(
-#     URI.open('https://www.espn.com/nfl/injuries')
-#   )
-#   byebug
-#   injuries = JSON.
-#     parse('{' + injuries_html.css('script').
-#       map{|s| s.children }[3][0].content.split(/\{/, 2).last[0..-2],
-#     symbolize_names: true)[:page][:content][:injuries]
-#   filtered_injuries = injuries.
-#     map{|team| team[:items].
-#     select{|item| ['INJURY_STATUS_IR', 'INJURY_STATUS_OUT'].
-#       include?(item[:type][:name]) &&
-#       ['QB', 'RB', 'WR', 'TE', 'K'].
-#       include?(item[:athlete][:position]) }}.
-#     flatten.
-#     map{|item| [
-#       item[:type][:name],
-#       item[:athlete][:name],
-#       item[:athlete][:position]
-#     ]}
-#   injury_report = {
-#     ir: filtered_injuries.
-#       select{|injury| injury[0] == "INJURY_STATUS_IR"},
-#     out: filtered_injuries.
-#       select{|injury| injury[0] == "INJURY_STATUS_OUT"}
-#   }
-
-#   File.open('injuries.json', 'w') do |f|
-#     f.puts injury_report.to_json
-#   end
-# end
-
 options = {
   idp: false,
+  concerns: false,
+  fresh: false
 }
 
 ARGV.each do |arg|
   case arg
   when '--idp'
     options[:idp] = true
+    puts "Including individual defensive players"
+  when '--concerns'
+    options[:concerns] = true
+    puts "Including list of players having concerns"
   when '--fresh'
     File.delete('tiers.json') if File.file?('tiers.json')
   else
     puts "Unknown option: #{arg}"
     exit
   end
+end
+
+if options[:concerns]
+  STATUSES = ["IR", "IR-R", "NFI-R", "PUP-R", "SUSP"]
+
+  if File.file?('concerns.json') && file = File.open("concerns.json").read
+    puts 'Using pre-fetched data from concerns.json'
+    concerns = JSON.parse(file)
+  else
+    puts 'Saving data from Yahoo to concerns.json'
+    concerns_html = Nokogiri::HTML(
+      URI.open('https://football.fantasysports.yahoo.com/f1/gamedaycalls')
+    )
+    rows = concerns_html.css('#gamedayscalltable tbody tr')
+    concerns = {}
+    rows.each do |row|
+      next unless row.css('.ysf-player-name a').text
+      # ignore the blank status to keep the list short
+      status = row.css('td .Badge-negative-bench').text
+      puts "Found #{status}"
+      next if status&.strip == '' ||
+        !status || !STATUSES.include?(status.strip)
+
+      unless concerns[status]
+        concerns[status] = []
+      end
+      concerns[status] << row.css('.ysf-player-name a').text
+    end
+
+    File.open('concerns.json', 'w') do |f|
+      f.puts concerns.to_json
+    end
+  end
+  flat_concerns = concerns.
+    map{|s, players| players.
+      map{|p| "#{p} (#{s})" }
+    }.flatten.sort
 end
 
 if (
@@ -159,18 +165,18 @@ row_contents = []
 positions = sources.map{|s| s[:tiers] }
 max_tiers = sources.map{|s| s[:tiers].count }.max
 max_tiers = 8 if max_tiers > 8
-# injured_ir = injury_report[:ir].map{|a| "#{a[1]} (#{a[2]})" }.flatten
-# injured_out = injury_report[:out].map{|a| "#{a[1]} (#{a[2]})" }.flatten
 max_tiers.times do |tier_index|
   (
     sources.map{|s| s[:tiers][tier_index] }.
     compact.map{|s| s.count }.max
   ).times do |player_index|
-    row_contents << (
-      sources.map do |s|
-        s[:tiers].dig(tier_index, player_index)&.strip || ''
-      end
-    )# + ['', injured_ir.shift,  injured_out.shift ]
+    row = sources.map do |s|
+      s[:tiers].dig(tier_index, player_index)&.strip || ''
+    end
+    if options[:concerns]
+      row += [ flat_concerns.shift ]
+    end
+    row_contents << row
   end
   row_contents << ["END OF TIER"]
 end
@@ -202,8 +208,15 @@ Axlsx::Package.new do |p|
   idp2 = s.add_style fg_color: '222222', bg_color: 'e2e2e2', sz: 7
   inj1 = s.add_style fg_color: '7b0b0b', bg_color: 'f4cdcc', sz: 7, b: true
   inj2 = s.add_style fg_color: '7b0b0b', bg_color: 'edacab', sz: 7
-  body = [qb, rb2, wr, te2, k, dst2, idp, divider, inj1, inj2]
-  body2 = [qb2, rb, wr2, te, k2, dst, idp2, divider, inj1, inj2]
+
+  body = [qb, rb2, wr, te2, k, dst2]
+  body += [idp] if options[:idp]
+  body += [inj1] if options[:concerns]
+
+  body2 = [qb2, rb, wr2, te, k2, dst2]
+  body2 += [idp] if options[:idp]
+  body2 += [inj2] if options[:concerns]
+
   is_odd = false
 
   p.workbook.add_worksheet(
@@ -219,13 +232,13 @@ Axlsx::Package.new do |p|
       :bottom => 0.15,
     }
   ) do |sheet|
-    sheet.add_row sources.map{|s| s[:label].upcase },# +
-      #['',], 'Injured (IR)', 'Injured (OUT)'],
-      style: heading, height: 10
+    headers = sources.map{|s| s[:label].upcase }
+    headers += ["CONCERNS"] if options[:concerns]
+    sheet.add_row headers, style: heading, height: 10
     row_contents.each do |row_content|
       if row_content[0] == "END OF TIER"
         is_odd = !is_odd
-        sheet.add_row sources.count.times.map { "" },
+        sheet.add_row headers.count.times.map { "" },
           style: divider,
           height: 3
         next
@@ -236,7 +249,7 @@ Axlsx::Package.new do |p|
         sheet.add_row row_content, style: body2, height: 8
       end
     end
-    sheet.column_widths *(sources.count.times.map{ 19 })
+    sheet.column_widths *(headers.count.times.map{ 18 })
   end
   p.serialize('cheat-sheet.xlsx')
 end
