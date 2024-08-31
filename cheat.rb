@@ -48,7 +48,26 @@ browser = Watir::Browser.new :firefox, headless: true
 #   end
 # end
 
-if File.file?('tiers.json') && file = File.open("tiers.json").read
+options = {
+  idp: false,
+}
+
+ARGV.each do |arg|
+  case arg
+  when '--idp'
+    options[:idp] = true
+  when '--fresh'
+    File.delete('tiers.json') if File.file?('tiers.json')
+  else
+    puts "Unknown option: #{arg}"
+    exit
+  end
+end
+
+if (
+  File.file?('tiers.json') &&
+  file = File.open("tiers.json").read
+)
   puts 'Using pre-fetched data from tiers.json'
   sources = JSON.parse(file, :symbolize_names => true)
 else
@@ -84,12 +103,16 @@ else
       url: 'https://www.fantasypros.com/nfl/rankings/dst-cheatsheets.php',
       tiers: []
     },
-    {
+  ]
+
+  if options[:idp]
+    sources << {
       label: 'idp',
       url: 'https://www.fantasypros.com/nfl/rankings/idp-cheatsheets.php',
       tiers: []
     }
-  ]
+  end
+
   sources.each do |source|
     doc = Nokogiri::HTML(
       URI.open(source[:url])
@@ -155,7 +178,8 @@ end
 #####################
 ## Build the sheet ##
 #####################
-puts "Generating cheat-sheet"
+puts "Generating cheat-sheet for " \
+  "#{sources.map{|s| s[:label].upcase }.join(', ')}"
 Axlsx::Package.new do |p|
   s = p.workbook.styles
   heading = s.add_style fg_color: 'FFFFFF',
@@ -201,7 +225,7 @@ Axlsx::Package.new do |p|
     row_contents.each do |row_content|
       if row_content[0] == "END OF TIER"
         is_odd = !is_odd
-        sheet.add_row ["", "", "", "", "", "", ""],
+        sheet.add_row sources.count.times.map { "" },
           style: divider,
           height: 3
         next
