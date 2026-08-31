@@ -226,8 +226,10 @@ Axlsx::Package.new do |p|
     :page_margins => {
       :right => 0.15,
       :left => 0.15,
-      :top => 0.15,
-      :bottom => 0.15,
+      :top => 0.0,
+      :bottom => 0.0,
+      :header => 0.0,
+      :footer => 0.0,
     }
   ) do |sheet|
     headers = sources.map{|s| s[:label].upcase }
