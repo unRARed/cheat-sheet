@@ -5,11 +5,6 @@ require "open-uri"
 require "byebug"
 require "json"
 require "axlsx"
-require "webdrivers"
-require "watir"
-
-Watir.default_timeout = 60
-browser = Watir::Browser.new :firefox, headless: true
 
 options = {
   idp: false,
@@ -125,35 +120,34 @@ else
   end
 
   sources.each do |source|
-    doc = Nokogiri::HTML(
-      URI.open(source[:url])
-    )
     puts "Saving #{source[:label].upcase}s"
-    browser.goto(source[:url])
-    table = browser.table(id: "ranking-table")
-    table.wait_until(&:exists?)
-    # match both of:
-    #   <tr data-tier="2" class="tier-row static">
-    #   <tr class="player-row">
-    rows = table.elements(tag_name: "tr", class: /.*-row/)
-    rows.wait_until(&:exists?)
+    # FantasyPros renders the ranking table client-side from a JSON blob
+    # embedded in the page as `var ecrData = {...};`. Scraping the rendered
+    # table truncated the results (lazy rendering + row caps), so read the
+    # full, already-ranked player list straight from that blob instead.
+    html = URI.open(
+      source[:url],
+      "User-Agent" => "Mozilla/5.0"
+    ).read
+    json = html[/var\s+ecrData\s*=\s*(\{.*?\});\s*$/m, 1] ||
+      html[/var\s+ecrData\s*=\s*(\{.*?\});/m, 1]
+    raise "No ecrData found for #{source[:label]}" unless json
+    players = JSON.parse(json)["players"]
+
     tier = []
-    # necessary or will prematurely
-    # scrape (missing later tiers)
-    sleep 5
-    puts "Found #{rows.count} rows"
-    rows.each_with_index do |row, index|
-      break if index > 120
-      if row.attributes[:class].include? "tier-row"
-        next if tier.empty?
-        puts " -> Scraped Tier #{source[:tiers].count + 1}"
-        source[:tiers] << tier
-        tier = []
-      elsif row.attributes[:class].include? "player-row"
-        tier << "#{row.a.text} " \
-          "#{row.span(class: "player-cell-team").text}"
+    current_tier = nil
+    players.
+      sort_by { |p| p["rank_ecr"].to_i }.
+      each do |player|
+        if current_tier && player["tier"] != current_tier
+          source[:tiers] << tier
+          tier = []
+        end
+        current_tier = player["tier"]
+        tier << "#{player["player_name"]} #{player["player_team_id"]}".strip
       end
-    end
+    source[:tiers] << tier unless tier.empty?
+    puts "Found #{players.count} players in #{source[:tiers].count} tiers"
   end
 
   puts "Writing tiers.json"
@@ -169,7 +163,6 @@ puts "Preparing local data for spreadsheet"
 row_contents = []
 positions = sources.map{|s| s[:tiers] }
 max_tiers = sources.map{|s| s[:tiers].count }.max
-max_tiers = 8 if max_tiers > 8
 max_tiers.times do |tier_index|
   (
     sources.map{|s| s[:tiers][tier_index] }.
@@ -194,25 +187,25 @@ puts "Generating cheat-sheet for " \
 Axlsx::Package.new do |p|
   s = p.workbook.styles
   heading = s.add_style fg_color: "FFFFFF",
-    bg_color: "222222", sz: 8, b: true
-  normal = s.add_style fg_color: "222222", sz: 6
+    bg_color: "222222", sz: 7, b: true
+  normal = s.add_style fg_color: "222222", sz: 5
   divider = s.add_style fg_color: "222222", bg_color: "222222", sz: 1
-  qb = s.add_style fg_color: "222222", bg_color: "ffffd1", sz: 7
-  qb2 = s.add_style fg_color: "222222", bg_color: "f3ffe3", sz: 7
-  wr = s.add_style fg_color: "222222", bg_color: "ecd4ff", sz: 7
-  wr2 = s.add_style fg_color: "222222", bg_color: "dcd3ff", sz: 7
-  rb = s.add_style fg_color: "222222", bg_color: "aff8db", sz: 7
-  rb2 = s.add_style fg_color: "222222", bg_color: "bffcc6", sz: 7
-  te = s.add_style fg_color: "222222", bg_color: "ffccf9", sz: 7
-  te2 = s.add_style fg_color: "222222", bg_color: "fcc2ff", sz: 7
-  k = s.add_style fg_color: "222222", bg_color: "85e3ff", sz: 7
-  k2 = s.add_style fg_color: "222222", bg_color: "ace7ff", sz: 7
-  dst = s.add_style fg_color: "222222", bg_color: "ffdf9e", sz: 7
-  dst2 = s.add_style fg_color: "222222", bg_color: "ffdfbf", sz: 7
-  idp = s.add_style fg_color: "222222", bg_color: "f5f5f5", sz: 7
-  idp2 = s.add_style fg_color: "222222", bg_color: "e2e2e2", sz: 7
-  inj1 = s.add_style fg_color: "7b0b0b", bg_color: "f4cdcc", sz: 7, b: true
-  inj2 = s.add_style fg_color: "7b0b0b", bg_color: "edacab", sz: 7
+  qb = s.add_style fg_color: "222222", bg_color: "ffffd1", sz: 6
+  qb2 = s.add_style fg_color: "222222", bg_color: "f3ffe3", sz: 6
+  wr = s.add_style fg_color: "222222", bg_color: "ecd4ff", sz: 6
+  wr2 = s.add_style fg_color: "222222", bg_color: "dcd3ff", sz: 6
+  rb = s.add_style fg_color: "222222", bg_color: "aff8db", sz: 6
+  rb2 = s.add_style fg_color: "222222", bg_color: "bffcc6", sz: 6
+  te = s.add_style fg_color: "222222", bg_color: "ffccf9", sz: 6
+  te2 = s.add_style fg_color: "222222", bg_color: "fcc2ff", sz: 6
+  k = s.add_style fg_color: "222222", bg_color: "85e3ff", sz: 6
+  k2 = s.add_style fg_color: "222222", bg_color: "ace7ff", sz: 6
+  dst = s.add_style fg_color: "222222", bg_color: "ffdf9e", sz: 6
+  dst2 = s.add_style fg_color: "222222", bg_color: "ffdfbf", sz: 6
+  idp = s.add_style fg_color: "222222", bg_color: "f5f5f5", sz: 6
+  idp2 = s.add_style fg_color: "222222", bg_color: "e2e2e2", sz: 6
+  inj1 = s.add_style fg_color: "7b0b0b", bg_color: "f4cdcc", sz: 6, b: true
+  inj2 = s.add_style fg_color: "7b0b0b", bg_color: "edacab", sz: 6
 
   body = [qb, rb2, wr, te2, k, dst2]
   body += [idp] if options[:idp]
@@ -239,7 +232,7 @@ Axlsx::Package.new do |p|
   ) do |sheet|
     headers = sources.map{|s| s[:label].upcase }
     headers += ["CONCERNS"] if options[:concerns]
-    sheet.add_row headers, style: heading, height: 10
+    sheet.add_row headers, style: heading, height: 9
     row_contents.each do |row_content|
       if row_content[0] == "END OF TIER"
         is_odd = !is_odd
@@ -249,12 +242,12 @@ Axlsx::Package.new do |p|
         next
       end
       if is_odd
-        sheet.add_row row_content, style: body, height: 8
+        sheet.add_row row_content, style: body, height: 7
       else
-        sheet.add_row row_content, style: body2, height: 8
+        sheet.add_row row_content, style: body2, height: 7
       end
     end
-    sheet.column_widths *(headers.count.times.map{ 18 })
+    sheet.column_widths *(headers.count.times.map{ 15 })
   end
   p.serialize("cheat-sheet.xlsx")
 end
